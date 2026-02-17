@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import Login from './components/Login';
 import Home from './components/Home';
 import CreateListing from './components/CreateListing';
+import ListingDetail from './components/ListingDetail';
 
 function App() {
   const [user, setUser] = useState(null);
   const [currentPage, setCurrentPage] = useState('home');
+  const [selectedListingId, setSelectedListingId] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Check if user has active session when app loads
@@ -48,6 +50,16 @@ function App() {
     setCurrentPage(page);
   };
 
+  const handleViewListing = (listingId) => {
+    setSelectedListingId(listingId);
+    setCurrentPage('detail');
+  };
+
+  const handleBackFromDetail = () => {
+    setCurrentPage('home');
+    setSelectedListingId(null);
+  };
+
   const handleListingCreated = () => {
     setCurrentPage('home');
   };
@@ -83,6 +95,13 @@ function App() {
             onCancel={handleCancelCreate}
           />
         );
+      case 'detail':
+        return (
+          <ListingDetail
+            listingId={selectedListingId}
+            onBack={handleBackFromDetail}
+          />
+        );
       case 'home':
       default:
         return (
@@ -90,6 +109,7 @@ function App() {
             user={user} 
             onLogout={handleLogout}
             onNavigate={handleNavigate}
+            onViewListing={handleViewListing}
           />
         );
     }

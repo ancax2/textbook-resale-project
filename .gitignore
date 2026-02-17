@@ -31,6 +31,9 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 
+# Assignment / docs (do not upload to repo)
+*.pdf
+
 # IDEs
 .vscode/
 .idea/

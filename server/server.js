@@ -97,21 +97,90 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
-// Get all active listings
-app.get('/api/listings', (req, res) => {
+// Get unique program names for filter dropdown (FILTER-2)
+app.get('/api/programs', (req, res) => {
   const query = `
-    SELECT l.*, u.first_name, u.last_name 
-    FROM listings l 
-    JOIN users u ON l.seller_id = u.user_id 
-    WHERE l.status = 'active'
-    ORDER BY l.created_at DESC
+    SELECT DISTINCT program_name 
+    FROM listings 
+    WHERE status = 'active' 
+    ORDER BY program_name ASC
   `;
-  
   db.query(query, (err, results) => {
     if (err) {
       return res.status(500).json({ error: 'Database error' });
     }
-    res.json(results);
+    res.json(results.map((r) => r.program_name));
+  });
+});
+
+// Get all active listings (optional search + filters, pagination: limit/offset)
+app.get('/api/listings', (req, res) => {
+  const search = (req.query.search || '').trim();
+  const programName = (req.query.program_name || '').trim();
+  const programYear = (req.query.program_year || '').trim();
+  const conditionType = (req.query.condition_type || '').trim();
+  const priceMin = req.query.price_min != null && req.query.price_min !== '' ? parseFloat(req.query.price_min) : null;
+  const priceMax = req.query.price_max != null && req.query.price_max !== '' ? parseFloat(req.query.price_max) : null;
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 25));
+  const offset = (page - 1) * limit;
+
+  let whereClause = `
+    FROM listings l 
+    JOIN users u ON l.seller_id = u.user_id 
+    WHERE l.status = 'active'
+  `;
+  const params = [];
+
+  if (search) {
+    const escaped = search.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+    const likePattern = `%${escaped}%`;
+    whereClause += ` AND (l.book_title LIKE ? OR l.author LIKE ? OR l.program_name LIKE ?)`;
+    params.push(likePattern, likePattern, likePattern);
+  }
+
+  if (programName) {
+    whereClause += ` AND l.program_name = ?`;
+    params.push(programName);
+  }
+  if (programYear) {
+    whereClause += ` AND l.program_year = ?`;
+    params.push(programYear);
+  }
+  if (conditionType) {
+    whereClause += ` AND l.condition_type = ?`;
+    params.push(conditionType);
+  }
+  if (priceMin != null && !Number.isNaN(priceMin)) {
+    whereClause += ` AND l.price >= ?`;
+    params.push(priceMin);
+  }
+  if (priceMax != null && !Number.isNaN(priceMax)) {
+    whereClause += ` AND l.price <= ?`;
+    params.push(priceMax);
+  }
+
+  const countQuery = `SELECT COUNT(*) as total ${whereClause}`;
+  const dataQuery = `
+    SELECT l.*, u.first_name, u.last_name 
+    ${whereClause}
+    ORDER BY l.created_at DESC
+    LIMIT ? OFFSET ?
+  `;
+  const dataParams = [...params, limit, offset];
+
+  db.query(countQuery, params, (errCount, countResult) => {
+    if (errCount) {
+      return res.status(500).json({ error: 'Database error' });
+    }
+    const total = countResult[0].total;
+
+    db.query(dataQuery, dataParams, (err, results) => {
+      if (err) {
+        return res.status(500).json({ error: 'Database error' });
+      }
+      res.json({ listings: results, total });
+    });
   });
 });
 

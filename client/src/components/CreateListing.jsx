@@ -161,16 +161,22 @@ function CreateListing({ user, onSuccess, onCancel }) {
               <h3 className="card-title mb-4">Create New Listing</h3>
 
               {error && (
-                <div className="alert alert-danger alert-dismissible fade show" role="alert">
-                  {error}
-                  <button type="button" className="btn-close" onClick={() => setError('')}></button>
+                <div className="alert alert-danger alert-dismissible fade show app-alert" role="alert">
+                  <span className="app-alert-icon" aria-hidden="true">⚠️</span>
+                  <div className="app-alert-message">
+                    {error}
+                  </div>
+                  <button type="button" className="btn-close" onClick={() => setError('')} aria-label="Close"></button>
                 </div>
               )}
 
               {success && (
-                <div className="alert alert-success alert-dismissible fade show" role="alert">
-                  {success}
-                  <button type="button" className="btn-close" onClick={() => setSuccess('')}></button>
+                <div className="alert alert-success alert-dismissible fade show app-alert app-alert-success" role="alert">
+                  <span className="app-alert-icon" aria-hidden="true">✅</span>
+                  <div className="app-alert-message">
+                    {success}
+                  </div>
+                  <button type="button" className="btn-close" onClick={() => setSuccess('')} aria-label="Close"></button>
                 </div>
               )}
 

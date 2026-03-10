@@ -4,9 +4,12 @@ function Login({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     
     try {
       const response = await fetch('http://localhost:5000/api/login', {
@@ -25,6 +28,8 @@ function Login({ onLogin }) {
       }
     } catch (err) {
       setError('Connection error. Make sure server is running.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -38,7 +43,10 @@ function Login({ onLogin }) {
               <h5 className="text-center mb-4 text-muted">Login</h5>
               
               {error && (
-                <div className="alert alert-danger">{error}</div>
+              <div className="alert alert-danger app-alert" role="alert">
+                <span className="app-alert-icon" aria-hidden="true">⚠️</span>
+                <div className="app-alert-message">{error}</div>
+              </div>
               )}
               
               <form onSubmit={handleSubmit}>
@@ -65,8 +73,19 @@ function Login({ onLogin }) {
                   />
                 </div>
                 
-                <button type="submit" className="btn btn-primary w-100">
-                  Login
+                <button type="submit" className="btn btn-primary w-100" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <span
+                        className="spinner-border spinner-border-sm me-2"
+                        role="status"
+                        aria-hidden="true"
+                      ></span>
+                      Logging in...
+                    </>
+                  ) : (
+                    'Login'
+                  )}
                 </button>
               </form>
               

@@ -15,7 +15,7 @@ const CONDITION_OPTIONS = ['New', 'Like New', 'Good', 'Fair', 'Poor'];
 const PROGRAM_YEAR_OPTIONS = ['1', '2', '3', '4'];
 const PAGE_SIZE = 25;
 
-function Home({ user, onLogout, onNavigate, onViewListing }) {
+function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -177,8 +177,23 @@ function Home({ user, onLogout, onNavigate, onViewListing }) {
             >
               + Create Listing
             </button>
-            <button className="btn btn-outline-danger" onClick={onLogout}>
-              Logout
+            <button
+              className="btn btn-outline-danger"
+              onClick={onLogout}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? (
+                <>
+                  <span
+                    className="spinner-border spinner-border-sm me-1"
+                    role="status"
+                    aria-hidden="true"
+                  ></span>
+                  Logging out...
+                </>
+              ) : (
+                'Logout'
+              )}
             </button>
           </div>
         </div>
@@ -313,21 +328,27 @@ function Home({ user, onLogout, onNavigate, onViewListing }) {
           <p className="mt-2">Loading listings...</p>
         </div>
       ) : showNoResults ? (
-        <div className="alert alert-warning" role="alert">
-          No results found.
-          {hasActiveSearch && <> Try different keywords or clear the search.</>}
-          {hasActiveFilters && <> Try changing or clearing your filters.</>}
+        <div className="alert alert-warning app-alert" role="alert">
+          <span className="app-alert-icon" aria-hidden="true">⚠️</span>
+          <div className="app-alert-message">
+            No results found.
+            {hasActiveSearch && <> Try different keywords or clear the search.</>}
+            {hasActiveFilters && <> Try changing or clearing your filters.</>}
+          </div>
         </div>
       ) : showEmptyState ? (
-        <div className="alert alert-info">
-          No listings available. Be the first to post!
+        <div className="alert alert-info app-alert" role="alert">
+          <span className="app-alert-icon" aria-hidden="true">ℹ️</span>
+          <div className="app-alert-message">
+            No listings available. Be the first to post!
+          </div>
         </div>
       ) : (
         <div className="row">
           {listings.map((listing) => (
             <div className="col-md-4 mb-3" key={listing.listing_id}>
               <div
-                className="card h-100 cursor-pointer"
+                className="card h-100 cursor-pointer listing-card"
                 role="button"
                 tabIndex={0}
                 onClick={() => onViewListing && onViewListing(listing.listing_id)}

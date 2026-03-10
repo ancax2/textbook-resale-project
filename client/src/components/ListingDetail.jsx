@@ -69,8 +69,11 @@ function ListingDetail({ listingId, onBack }) {
             <li className="breadcrumb-item active">Not found</li>
           </ol>
         </nav>
-        <div className="alert alert-warning">
-          Listing not found. It may have been removed or the ID is invalid.
+        <div className="alert alert-warning app-alert" role="alert">
+          <span className="app-alert-icon" aria-hidden="true">⚠️</span>
+          <div className="app-alert-message">
+            Listing not found. It may have been removed or the ID is invalid.
+          </div>
         </div>
         <button type="button" className="btn btn-outline-primary" onClick={onBack}>
           ← Back to Listings

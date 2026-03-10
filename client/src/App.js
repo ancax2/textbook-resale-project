@@ -9,6 +9,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState('home');
   const [selectedListingId, setSelectedListingId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [logoutLoading, setLogoutLoading] = useState(false);
 
   // Check if user has active session when app loads
   useEffect(() => {
@@ -38,12 +39,19 @@ function App() {
   };
 
   const handleLogout = async () => {
-    await fetch('http://localhost:5000/api/logout', {
-      method: 'POST',
-      credentials: 'include'
-    });
-    setUser(null);
-    setCurrentPage('home');
+    try {
+      setLogoutLoading(true);
+      await fetch('http://localhost:5000/api/logout', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      setUser(null);
+      setCurrentPage('home');
+    } catch (err) {
+      console.error('Logout failed:', err);
+    } finally {
+      setLogoutLoading(false);
+    }
   };
 
   const handleNavigate = (page) => {
@@ -108,6 +116,7 @@ function App() {
           <Home 
             user={user} 
             onLogout={handleLogout}
+            isLoggingOut={logoutLoading}
             onNavigate={handleNavigate}
             onViewListing={handleViewListing}
           />

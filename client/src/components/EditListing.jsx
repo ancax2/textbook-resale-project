@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import PageHeader from './PageHeader';
 
 const API_BASE = 'http://localhost:5000';
 
-function CreateListing({ user, onSuccess, onCancel }) {
+function EditListing({ listingId, user, onSuccess, onCancel }) {
   const [programs, setPrograms] = useState([]);
   const [programsLoading, setProgramsLoading] = useState(true);
 
@@ -18,11 +18,10 @@ function CreateListing({ user, onSuccess, onCancel }) {
     comments: ''
   });
 
-  const [images, setImages] = useState([]);
-  const [imagePreviews, setImagePreviews] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,38 +42,54 @@ function CreateListing({ user, onSuccess, onCancel }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (!listingId) {
+      setError('No listing ID provided.');
+      setFetching(false);
+      return;
+    }
+    fetch(`${API_BASE}/api/listings/${listingId}`, { credentials: 'include' })
+      .then((res) => {
+        if (!res.ok) throw new Error('Not found');
+        return res.json();
+      })
+      .then((data) => {
+        if (Number(data.seller_id) !== Number(user?.user_id)) {
+          setError('You can only edit your own listings.');
+          return;
+        }
+        if (data.status !== 'active') {
+          setError('Only active listings can be edited.');
+          return;
+        }
+        setFormData({
+          book_title: data.book_title || '',
+          author: data.author || '',
+          publish_year: data.publish_year || '',
+          program_name: data.program_name || '',
+          program_year: String(data.program_year || ''),
+          price: data.price || '',
+          condition_type: data.condition_type || '',
+          comments: data.comments || ''
+        });
+      })
+      .catch(() => setError('Could not load listing.'))
+      .finally(() => setFetching(false));
+  }, [listingId, user]);
+
   const handleInputChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
+    setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files);
-    
-    // Limit to 3 images
-    if (files.length > 3) {
-      setError('Maximum 3 images allowed');
-      return;
+  const programSelectOptions = useMemo(() => {
+    const current = (formData.program_name || '').trim();
+    if (current && !programs.includes(current)) {
+      return [...programs, current].sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+      );
     }
-
-    // Validate file types (PNG, JPEG only)
-    const validTypes = ['image/png', 'image/jpeg', 'image/jpg'];
-    const invalidFiles = files.filter(file => !validTypes.includes(file.type));
-    
-    if (invalidFiles.length > 0) {
-      setError('Only PNG and JPEG images are allowed');
-      return;
-    }
-
-    setImages(files);
-    
-    // Create preview URLs
-    const previews = files.map(file => URL.createObjectURL(file));
-    setImagePreviews(previews);
-    setError('');
-  };
+    return programs;
+  }, [programs, formData.program_name]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -82,93 +97,59 @@ function CreateListing({ user, onSuccess, onCancel }) {
     setSuccess('');
     setLoading(true);
 
-    // Validate at least one image
-    if (images.length === 0) {
-      setError('At least one image is required');
-      setLoading(false);
-      return;
-    }
-
-    // Create FormData for file upload
-    const formDataToSend = new FormData();
-    
-    // Append all form fields
-    Object.keys(formData).forEach(key => {
-      formDataToSend.append(key, formData[key]);
-    });
-
-    // Append images
-    images.forEach(image => {
-      formDataToSend.append('images', image);
-    });
-
     try {
-      const response = await fetch(`${API_BASE}/api/listings`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE}/api/listings/${listingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: formDataToSend
+        body: JSON.stringify(formData)
       });
 
       const data = await response.json();
 
-      if (response.ok) {
-        setSuccess('Listing created successfully!');
-        // Reset form
-        setFormData({
-          book_title: '',
-          author: '',
-          publish_year: '',
-          program_name: '',
-          program_year: '',
-          price: '',
-          condition_type: '',
-          comments: ''
-        });
-        setImages([]);
-        setImagePreviews([]);
-        
-        // Call success callback if provided
-        if (onSuccess) {
-          setTimeout(() => onSuccess(), 1500);
-        }
+      if (response.ok && data.success) {
+        setSuccess('Listing updated successfully!');
+        if (onSuccess) setTimeout(() => onSuccess(), 1500);
       } else {
-        setError(data.error || 'Failed to create listing');
+        setError(data.error || 'Failed to update listing');
       }
     } catch (err) {
       setError('Connection error. Please try again.');
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = () => {
-    // Check if form has any data
-    const hasData = Object.values(formData).some(value => value !== '') || images.length > 0;
-    
-    if (hasData) {
-      const confirmLeave = window.confirm('You have unsaved changes. Are you sure you want to leave?');
-      if (confirmLeave) {
-        onCancel();
-      }
-    } else {
-      onCancel();
-    }
+    if (onCancel) onCancel();
   };
+
+  if (fetching) {
+    return (
+      <div className="container mt-4 px-3">
+        <div className="text-center py-5">
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading…</span>
+          </div>
+          <p className="mt-2">Loading listing…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mt-4 px-3">
       <PageHeader
-        title="Sell a textbook"
-        subtitle={`${user.first_name} ${user.last_name} — add photos and details. Buyers will contact you through the listing.`}
+        title="Edit listing"
+        subtitle={`Update the details for this listing. Images cannot be changed.`}
       >
-        <button 
+        <button
           type="button"
-          className="btn btn-outline-secondary btn-sm" 
+          className="btn btn-outline-secondary btn-sm"
           onClick={handleCancel}
           disabled={loading}
         >
-          Cancel and return to browse
+          Cancel and return
         </button>
       </PageHeader>
 
@@ -181,25 +162,20 @@ function CreateListing({ user, onSuccess, onCancel }) {
               {error && (
                 <div className="alert alert-danger alert-dismissible fade show app-alert" role="alert">
                   <span className="app-alert-icon" aria-hidden="true">⚠️</span>
-                  <div className="app-alert-message">
-                    {error}
-                  </div>
-                  <button type="button" className="btn-close" onClick={() => setError('')} aria-label="Close"></button>
+                  <div className="app-alert-message">{error}</div>
+                  <button type="button" className="btn-close" onClick={() => setError('')} aria-label="Close" />
                 </div>
               )}
 
               {success && (
                 <div className="alert alert-success alert-dismissible fade show app-alert app-alert-success" role="alert">
                   <span className="app-alert-icon" aria-hidden="true">✅</span>
-                  <div className="app-alert-message">
-                    {success}
-                  </div>
-                  <button type="button" className="btn-close" onClick={() => setSuccess('')} aria-label="Close"></button>
+                  <div className="app-alert-message">{success}</div>
+                  <button type="button" className="btn-close" onClick={() => setSuccess('')} aria-label="Close" />
                 </div>
               )}
 
               <form onSubmit={handleSubmit}>
-                {/* Book Title */}
                 <div className="mb-3">
                   <label className="form-label">
                     Book Title <span className="text-danger">*</span>
@@ -210,12 +186,10 @@ function CreateListing({ user, onSuccess, onCancel }) {
                     name="book_title"
                     value={formData.book_title}
                     onChange={handleInputChange}
-                    placeholder="e.g., Introduction to Programming"
                     required
                   />
                 </div>
 
-                {/* Author */}
                 <div className="mb-3">
                   <label className="form-label">
                     Author <span className="text-danger">*</span>
@@ -226,12 +200,10 @@ function CreateListing({ user, onSuccess, onCancel }) {
                     name="author"
                     value={formData.author}
                     onChange={handleInputChange}
-                    placeholder="e.g., John Smith"
                     required
                   />
                 </div>
 
-                {/* Publish Year */}
                 <div className="mb-3">
                   <label className="form-label">
                     Publish Year <span className="text-danger">*</span>
@@ -242,7 +214,6 @@ function CreateListing({ user, onSuccess, onCancel }) {
                     name="publish_year"
                     value={formData.publish_year}
                     onChange={handleInputChange}
-                    placeholder="e.g., 2023"
                     min="1900"
                     max="2026"
                     required
@@ -265,7 +236,7 @@ function CreateListing({ user, onSuccess, onCancel }) {
                     <option value="">
                       {programsLoading ? 'Loading programs…' : 'Select program…'}
                     </option>
-                    {programs.map((p) => (
+                    {programSelectOptions.map((p) => (
                       <option key={p} value={p}>
                         {p}
                       </option>
@@ -273,7 +244,6 @@ function CreateListing({ user, onSuccess, onCancel }) {
                   </select>
                 </div>
 
-                {/* Program Year */}
                 <div className="mb-3">
                   <label className="form-label">
                     Year of Program <span className="text-danger">*</span>
@@ -293,7 +263,6 @@ function CreateListing({ user, onSuccess, onCancel }) {
                   </select>
                 </div>
 
-                {/* Price */}
                 <div className="mb-3">
                   <label className="form-label">
                     Price (CAD) <span className="text-danger">*</span>
@@ -304,14 +273,12 @@ function CreateListing({ user, onSuccess, onCancel }) {
                     name="price"
                     value={formData.price}
                     onChange={handleInputChange}
-                    placeholder="e.g., 45.00"
                     step="0.01"
                     min="0"
                     required
                   />
                 </div>
 
-                {/* Condition */}
                 <div className="mb-3">
                   <label className="form-label">
                     Condition <span className="text-danger">*</span>
@@ -332,7 +299,6 @@ function CreateListing({ user, onSuccess, onCancel }) {
                   </select>
                 </div>
 
-                {/* Comments (Optional) */}
                 <div className="mb-3">
                   <label className="form-label">Comments (Optional)</label>
                   <textarea
@@ -342,69 +308,30 @@ function CreateListing({ user, onSuccess, onCancel }) {
                     onChange={handleInputChange}
                     rows="3"
                     placeholder="Any additional information about the book..."
-                  ></textarea>
-                </div>
-
-                {/* Images */}
-                <div className="mb-3">
-                  <label className="form-label">
-                    Book Images (Max 3) <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="file"
-                    className="form-control"
-                    accept="image/png, image/jpeg, image/jpg"
-                    multiple
-                    onChange={handleImageChange}
-                    required
                   />
-                  <small className="form-text text-muted">
-                    Accepted formats: PNG, JPEG. Maximum 3 images.
-                  </small>
                 </div>
 
-                {/* Image Previews */}
-                {imagePreviews.length > 0 && (
-                  <div className="mb-3">
-                    <label className="form-label">Image Previews:</label>
-                    <div className="row">
-                      {imagePreviews.map((preview, index) => (
-                        <div key={index} className="col-md-4 mb-2">
-                          <img 
-                            src={preview} 
-                            alt={`Preview ${index + 1}`}
-                            className="img-fluid img-thumbnail"
-                            loading="lazy"
-                            style={{ maxHeight: '200px', objectFit: 'cover', width: '100%' }}
-                          />
-                          <p className="text-center small mt-1">
-                            {images[index].name}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <p className="text-muted small mb-3">
+                  <em>📷 Images cannot be changed after listing creation.</em>
+                </p>
 
-                {/* Submit and Cancel Buttons */}
                 <div className="d-grid gap-2">
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     className="btn btn-primary btn-lg"
                     disabled={loading}
                   >
                     {loading ? (
                       <>
-                        <span className="spinner-border spinner-border-sm me-2" role="status"></span>
-                        Creating Listing...
+                        <span className="spinner-border spinner-border-sm me-2" role="status" />
+                        Saving Changes…
                       </>
                     ) : (
-                      'Create Listing'
+                      'Save Changes'
                     )}
                   </button>
-                  
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="btn btn-secondary"
                     onClick={handleCancel}
                     disabled={loading}
@@ -425,4 +352,4 @@ function CreateListing({ user, onSuccess, onCancel }) {
   );
 }
 
-export default CreateListing;
+export default EditListing;

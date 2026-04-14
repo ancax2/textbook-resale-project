@@ -29,7 +29,7 @@ CREATE TABLE listings (
     image1_path VARCHAR(255), -- Simplified: just store 3 image paths directly
     image2_path VARCHAR(255),
     image3_path VARCHAR(255),
-    status ENUM('active', 'sold') DEFAULT 'active',
+    status ENUM('active', 'sold', 'deleted') DEFAULT 'active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     marked_sold_at TIMESTAMP NULL,
     FOREIGN KEY (seller_id) REFERENCES users(user_id)
@@ -76,12 +76,16 @@ CREATE TABLE reports (
     reporter_id INT NOT NULL,
     listing_id INT,
     message_id INT,
+    report_type VARCHAR(100) NULL,
     reason TEXT NOT NULL,
     status ENUM('pending', 'resolved') DEFAULT 'pending',
+    admin_notes TEXT NULL,
+    resolved_by_admin_id INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (reporter_id) REFERENCES users(user_id),
     FOREIGN KEY (listing_id) REFERENCES listings(listing_id),
-    FOREIGN KEY (message_id) REFERENCES messages(message_id)
+    FOREIGN KEY (message_id) REFERENCES messages(message_id),
+    FOREIGN KEY (resolved_by_admin_id) REFERENCES users(user_id)
 );
 
 -- ============================================

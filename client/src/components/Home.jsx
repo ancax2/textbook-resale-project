@@ -1,13 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
-// Optional: highlight search keywords in text (SEARCH-12)
+// Highlights matching search keywords within listing text
 function highlightText(text, keyword) {
   if (!text || !keyword || !keyword.trim()) return text;
   const k = keyword.trim();
   const regex = new RegExp(`(${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
   const parts = String(text).split(regex);
   return parts.map((part, i) =>
-    i % 2 === 1 ? <mark key={i} className="bg-warning px-1">{part}</mark> : part
+    i % 2 === 1 ? <mark key={i} className="nbcc-highlight px-1">{part}</mark> : part
   );
 }
 
@@ -15,7 +15,17 @@ const CONDITION_OPTIONS = ['New', 'Like New', 'Good', 'Fair', 'Poor'];
 const PROGRAM_YEAR_OPTIONS = ['1', '2', '3', '4'];
 const PAGE_SIZE = 25;
 
-function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
+const CONDITION_BADGES = {
+  'New': 'bg-success',
+  'Like New': 'bg-info',
+  'Good': 'bg-primary',
+  'Fair': 'bg-warning text-dark',
+  'Poor': 'bg-secondary'
+};
+
+const API_BASE = 'http://localhost:5000';
+
+function Home({ user, onNavigate, onViewListing }) {
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,12 +35,26 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
   const [conditionType, setConditionType] = useState('');
   const [priceMin, setPriceMin] = useState('');
   const [priceMax, setPriceMax] = useState('');
-  const [appliedFilters, setAppliedFilters] = useState({});
+
   const [page, setPage] = useState(1);
   const [totalResults, setTotalResults] = useState(0);
+  const [bookmarkIds, setBookmarkIds] = useState(new Set());
+  const [bookmarkTogglingId, setBookmarkTogglingId] = useState(null);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const filterPanelRef = useRef(null);
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/programs')
+    fetch(`${API_BASE}/api/bookmarks`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data) => {
+        const list = Array.isArray(data) ? data : [];
+        setBookmarkIds(new Set(list.map((b) => b.listing_id)));
+      })
+      .catch(() => setBookmarkIds(new Set()));
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/programs`)
       .then((res) => res.json())
       .then((data) => setPrograms(Array.isArray(data) ? data : []))
       .catch(() => setPrograms([]));
@@ -41,11 +65,11 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
     try {
       const params = new URLSearchParams();
       if (searchTerm.trim()) params.set('search', searchTerm.trim());
-      if (appliedFilters.program_name) params.set('program_name', appliedFilters.program_name);
-      if (appliedFilters.program_year) params.set('program_year', appliedFilters.program_year);
-      if (appliedFilters.condition_type) params.set('condition_type', appliedFilters.condition_type);
-      if (appliedFilters.price_min !== '' && appliedFilters.price_min != null) params.set('price_min', appliedFilters.price_min);
-      if (appliedFilters.price_max !== '' && appliedFilters.price_max != null) params.set('price_max', appliedFilters.price_max);
+      if (programName) params.set('program_name', programName);
+      if (programYear) params.set('program_year', programYear);
+      if (conditionType) params.set('condition_type', conditionType);
+      if (priceMin !== '') params.set('price_min', priceMin);
+      if (priceMax !== '') params.set('price_max', priceMax);
       params.set('page', String(page));
       params.set('limit', String(PAGE_SIZE));
       const url = `http://localhost:5000/api/listings?${params.toString()}`;
@@ -65,18 +89,18 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, appliedFilters, page]);
+  }, [searchTerm, programName, programYear, conditionType, priceMin, priceMax, page]);
 
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, appliedFilters]);
+  }, [searchTerm, programName, programYear, conditionType, priceMin, priceMax]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
       fetchListings();
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchTerm, appliedFilters, page, fetchListings]);
+  }, [fetchListings]);
 
   const handleSearchSubmit = (e) => {
     e?.preventDefault();
@@ -87,32 +111,36 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
     setSearchTerm('');
   };
 
-  const handleApplyFilters = () => {
-    setAppliedFilters({
-      program_name: programName || '',
-      program_year: programYear || '',
-      condition_type: conditionType || '',
-      price_min: priceMin !== '' ? priceMin : '',
-      price_max: priceMax !== '' ? priceMax : ''
-    });
-  };
-
   const handleClearFilters = () => {
     setProgramName('');
     setProgramYear('');
     setConditionType('');
     setPriceMin('');
     setPriceMax('');
-    setAppliedFilters({});
   };
+
+  // Close filter panel on click outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (filterPanelRef.current && !filterPanelRef.current.contains(e.target)) {
+        setFilterPanelOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const hasActiveSearch = searchTerm.trim() !== '';
   const hasActiveFilters =
-    (appliedFilters.program_name && appliedFilters.program_name !== '') ||
-    (appliedFilters.program_year && appliedFilters.program_year !== '') ||
-    (appliedFilters.condition_type && appliedFilters.condition_type !== '') ||
-    (appliedFilters.price_min !== '' && appliedFilters.price_min != null) ||
-    (appliedFilters.price_max !== '' && appliedFilters.price_max != null);
+    programName !== '' ||
+    programYear !== '' ||
+    conditionType !== '' ||
+    priceMin !== '' ||
+    priceMax !== '';
+
+  const activeFilterCount = [programName, programYear, conditionType, priceMin, priceMax]
+    .filter((v) => v !== '').length;
+
   const showNoResults = !loading && listings.length === 0 && (hasActiveSearch || hasActiveFilters);
   const showEmptyState = !loading && listings.length === 0 && !hasActiveSearch && !hasActiveFilters;
 
@@ -126,6 +154,36 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
     setPage(next);
   };
 
+  const handleToggleBookmark = async (e, listingId) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (bookmarkTogglingId !== null) return;
+    setBookmarkTogglingId(listingId);
+    const isBookmarked = bookmarkIds.has(listingId);
+    try {
+      if (isBookmarked) {
+        const res = await fetch(`${API_BASE}/api/bookmarks/listing/${listingId}`, {
+          method: 'DELETE',
+          credentials: 'include'
+        });
+        if (res.ok) setBookmarkIds((prev) => { const s = new Set(prev); s.delete(listingId); return s; });
+      } else {
+        const res = await fetch(`${API_BASE}/api/bookmarks`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ listing_id: listingId })
+        });
+        const json = await res.json();
+        if (res.ok && json.success) setBookmarkIds((prev) => new Set([...prev, listingId]));
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBookmarkTogglingId(null);
+    }
+  };
+
   const pageNumbers = () => {
     if (totalPages <= 7) {
       return Array.from({ length: totalPages }, (_, i) => i + 1);
@@ -137,188 +195,167 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
   };
 
   return (
-    <div className="container mt-4">
-      <nav className="navbar navbar-light bg-light mb-4">
-        <div className="container-fluid flex-wrap">
-          <span className="navbar-brand mb-0">
-            Welcome, {user.first_name} {user.last_name}
-          </span>
-          <div className="d-flex align-items-center flex-grow-1 flex-md-grow-0 justify-content-md-end gap-2 mt-2 mt-md-0">
-            <form
-              className="d-flex me-2"
-              onSubmit={handleSearchSubmit}
-              style={{ minWidth: '200px', maxWidth: '320px' }}
-            >
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Search by title, author, or program..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                aria-label="Search textbooks"
-              />
-              <button type="submit" className="btn btn-outline-primary ms-1" title="Search">
-                Search
+    <div className="container mt-4 px-3">
+      <div className="app-page-header">
+        <h1 className="h2">Browse textbooks</h1>
+        <p className="text-muted small mb-0">
+          Welcome, {user.first_name} {user.last_name}. Find books by program, condition, or price — or use <strong>Sell a book</strong> in the menu to list yours.
+        </p>
+      </div>
+
+      {/* ── Unified search bar + collapsible filters ── */}
+      <div className="search-filter-bar mb-4" ref={filterPanelRef}>
+        <form className="search-bar-row" onSubmit={handleSearchSubmit}>
+          <div className="search-input-wrapper">
+            <span className="search-icon" aria-hidden="true">🔍</span>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search by title, author, or program…"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              aria-label="Search textbooks"
+            />
+            {hasActiveSearch && (
+              <button
+                type="button"
+                className="search-clear-btn"
+                onClick={handleClearSearch}
+                title="Clear search"
+                aria-label="Clear search"
+              >
+                ✕
               </button>
-              {hasActiveSearch && (
-                <button
-                  type="button"
-                  className="btn btn-outline-secondary ms-1"
-                  onClick={handleClearSearch}
-                  title="Clear search"
+            )}
+          </div>
+          <button
+            type="button"
+            className={`btn filter-toggle-btn${filterPanelOpen ? ' active' : ''}${hasActiveFilters ? ' has-filters' : ''}`}
+            onClick={() => setFilterPanelOpen((o) => !o)}
+            aria-expanded={filterPanelOpen}
+            title="Toggle filters"
+          >
+            <span aria-hidden="true">⚙</span>
+            <span className="d-none d-sm-inline">Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="filter-badge">{activeFilterCount}</span>
+            )}
+          </button>
+        </form>
+
+        {/* Collapsible filter panel */}
+        {filterPanelOpen && (
+          <div className="filter-panel">
+            <div className="row g-3">
+              <div className="col-sm-6 col-lg-3">
+                <label className="form-label small text-muted">Program</label>
+                <select
+                  className="form-select form-select-sm"
+                  value={programName}
+                  onChange={(e) => setProgramName(e.target.value)}
+                  aria-label="Filter by program"
                 >
-                  Clear
-                </button>
-              )}
-            </form>
+                  <option value="">All programs</option>
+                  {programs.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-sm-6 col-lg-3">
+                <label className="form-label small text-muted">Program Year</label>
+                <select
+                  className="form-select form-select-sm"
+                  value={programYear}
+                  onChange={(e) => setProgramYear(e.target.value)}
+                  aria-label="Filter by program year"
+                >
+                  <option value="">All years</option>
+                  {PROGRAM_YEAR_OPTIONS.map((y) => (
+                    <option key={y} value={y}>Year {y}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-sm-6 col-lg-2">
+                <label className="form-label small text-muted">Condition</label>
+                <select
+                  className="form-select form-select-sm"
+                  value={conditionType}
+                  onChange={(e) => setConditionType(e.target.value)}
+                  aria-label="Filter by condition"
+                >
+                  <option value="">All conditions</option>
+                  {CONDITION_OPTIONS.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-6 col-lg-2">
+                <label className="form-label small text-muted">Min price ($)</label>
+                <input
+                  type="number"
+                  className="form-control form-control-sm"
+                  placeholder="0"
+                  min="0"
+                  step="0.01"
+                  value={priceMin}
+                  onChange={(e) => setPriceMin(e.target.value)}
+                  aria-label="Minimum price"
+                />
+              </div>
+              <div className="col-6 col-lg-2">
+                <label className="form-label small text-muted">Max price ($)</label>
+                <input
+                  type="number"
+                  className="form-control form-control-sm"
+                  placeholder="Any"
+                  min="0"
+                  step="0.01"
+                  value={priceMax}
+                  onChange={(e) => setPriceMax(e.target.value)}
+                  aria-label="Maximum price"
+                />
+              </div>
+            </div>
+            <div className="filter-panel-actions">
+              <span className="small text-muted">Results update instantly</span>
+            </div>
+          </div>
+        )}
+
+        {/* Active filter chips — below filter controls so summary appears after options */}
+        {hasActiveFilters && (
+          <div className="filter-chips">
+            {programName && (
+              <span className="filter-chip">Program: {programName}</span>
+            )}
+            {programYear && (
+              <span className="filter-chip">Year: {programYear}</span>
+            )}
+            {conditionType && (
+              <span className="filter-chip">Condition: {conditionType}</span>
+            )}
+            {priceMin !== '' && (
+              <span className="filter-chip">Min ${priceMin}</span>
+            )}
+            {priceMax !== '' && (
+              <span className="filter-chip">Max ${priceMax}</span>
+            )}
             <button
-              className="btn btn-success me-2"
-              onClick={() => onNavigate('create')}
+              type="button"
+              className="filter-chip filter-chip-clear"
+              onClick={handleClearFilters}
             >
-              + Create Listing
-            </button>
-            <button
-              className="btn btn-outline-danger"
-              onClick={onLogout}
-              disabled={isLoggingOut}
-            >
-              {isLoggingOut ? (
-                <>
-                  <span
-                    className="spinner-border spinner-border-sm me-1"
-                    role="status"
-                    aria-hidden="true"
-                  ></span>
-                  Logging out...
-                </>
-              ) : (
-                'Logout'
-              )}
+              ✕ Clear all
             </button>
           </div>
-        </div>
-      </nav>
-
-      <h2>Available Textbooks</h2>
+        )}
+      </div>
 
       {!loading && totalResults > 0 && (
         <p className="text-muted small mb-2">
           Showing {startItem}–{endItem} of {totalResults} result{totalResults !== 1 ? 's' : ''}
         </p>
       )}
-
-      <div className="card shadow-sm mb-4">
-        <div className="card-body">
-          <h5 className="card-title mb-3">Filters</h5>
-          <div className="row g-3">
-            <div className="col-md-6 col-lg-2">
-              <label className="form-label small text-muted">Program</label>
-              <select
-                className="form-select form-select-sm"
-                value={programName}
-                onChange={(e) => setProgramName(e.target.value)}
-                aria-label="Filter by program"
-              >
-                <option value="">All programs</option>
-                {programs.map((p) => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-6 col-lg-2">
-              <label className="form-label small text-muted">Program Year</label>
-              <select
-                className="form-select form-select-sm"
-                value={programYear}
-                onChange={(e) => setProgramYear(e.target.value)}
-                aria-label="Filter by program year"
-              >
-                <option value="">All years</option>
-                {PROGRAM_YEAR_OPTIONS.map((y) => (
-                  <option key={y} value={y}>Year {y}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-6 col-lg-2">
-              <label className="form-label small text-muted">Condition</label>
-              <select
-                className="form-select form-select-sm"
-                value={conditionType}
-                onChange={(e) => setConditionType(e.target.value)}
-                aria-label="Filter by condition"
-              >
-                <option value="">All conditions</option>
-                {CONDITION_OPTIONS.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-6 col-lg-2">
-              <label className="form-label small text-muted">Min price ($)</label>
-              <input
-                type="number"
-                className="form-control form-control-sm"
-                placeholder="Min"
-                min="0"
-                step="0.01"
-                value={priceMin}
-                onChange={(e) => setPriceMin(e.target.value)}
-                aria-label="Minimum price"
-              />
-            </div>
-            <div className="col-md-6 col-lg-2">
-              <label className="form-label small text-muted">Max price ($)</label>
-              <input
-                type="number"
-                className="form-control form-control-sm"
-                placeholder="Max"
-                min="0"
-                step="0.01"
-                value={priceMax}
-                onChange={(e) => setPriceMax(e.target.value)}
-                aria-label="Maximum price"
-              />
-            </div>
-            <div className="col-md-12 col-lg-2 d-flex align-items-end gap-1">
-              <button
-                type="button"
-                className="btn btn-primary btn-sm flex-grow-1"
-                onClick={handleApplyFilters}
-              >
-                Apply Filters
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline-secondary btn-sm"
-                onClick={handleClearFilters}
-                title="Clear all filters"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-          {hasActiveFilters && (
-            <div className="mt-3 pt-2 border-top">
-              <span className="small text-muted me-2">Active:</span>
-              {appliedFilters.program_name && (
-                <span className="badge bg-primary me-1 mb-1">Program: {appliedFilters.program_name}</span>
-              )}
-              {appliedFilters.program_year && (
-                <span className="badge bg-primary me-1 mb-1">Year: {appliedFilters.program_year}</span>
-              )}
-              {appliedFilters.condition_type && (
-                <span className="badge bg-primary me-1 mb-1">Condition: {appliedFilters.condition_type}</span>
-              )}
-              {(appliedFilters.price_min !== '' && appliedFilters.price_min != null) && (
-                <span className="badge bg-primary me-1 mb-1">Min $ {appliedFilters.price_min}</span>
-              )}
-              {(appliedFilters.price_max !== '' && appliedFilters.price_max != null) && (
-                <span className="badge bg-primary me-1 mb-1">Max $ {appliedFilters.price_max}</span>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
 
       {loading ? (
         <div className="text-center mt-5">
@@ -348,15 +385,29 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
           {listings.map((listing) => (
             <div className="col-md-4 mb-3" key={listing.listing_id}>
               <div
-                className="card h-100 cursor-pointer listing-card"
+                className="card h-100 cursor-pointer listing-card position-relative"
                 role="button"
                 tabIndex={0}
                 onClick={() => onViewListing && onViewListing(listing.listing_id)}
                 onKeyDown={(e) => e.key === 'Enter' && onViewListing && onViewListing(listing.listing_id)}
                 style={{ cursor: onViewListing ? 'pointer' : 'default' }}
               >
+                <button
+                  type="button"
+                  className="btn btn-sm position-absolute top-0 end-0 m-2 p-1 border-0 bg-white bg-opacity-90 rounded"
+                  onClick={(e) => handleToggleBookmark(e, listing.listing_id)}
+                  disabled={bookmarkTogglingId === listing.listing_id}
+                  aria-label={bookmarkIds.has(listing.listing_id) ? 'Remove bookmark' : 'Add bookmark'}
+                  title={bookmarkIds.has(listing.listing_id) ? 'Remove bookmark' : 'Add bookmark'}
+                >
+                  {bookmarkIds.has(listing.listing_id) ? (
+                    <span className="text-warning" style={{ fontSize: '1.1rem' }}>★</span>
+                  ) : (
+                    <span className="text-muted" style={{ fontSize: '1.1rem' }}>☆</span>
+                  )}
+                </button>
                 <div className="card-body">
-                  <h5 className="card-title">
+                  <h5 className="card-title pe-4">
                     {highlightText(listing.book_title, searchTerm) || listing.book_title}
                   </h5>
                   <p className="card-text">
@@ -371,10 +422,16 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
                     <strong>Price:</strong> ${parseFloat(listing.price).toFixed(2)}
                     <br />
                     <strong>Condition:</strong>{' '}
-                    <span className="badge bg-secondary">{listing.condition_type}</span>
+                    <span className={`badge ${CONDITION_BADGES[listing.condition_type] || 'bg-secondary'}`}>{listing.condition_type}</span>
                   </p>
                   <p className="text-muted small mb-0">
                     Seller: {listing.first_name} {listing.last_name}
+                    {listing.seller_avg_rating != null && listing.seller_feedback_count > 0 && (
+                      <span className="ms-1">
+                        · ★ {Number(listing.seller_avg_rating).toFixed(1)}
+                        <span className="text-muted"> ({listing.seller_feedback_count})</span>
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -389,7 +446,7 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
             Page {page} of {totalPages}
           </div>
           <ul className="pagination pagination-sm mb-0 flex-wrap">
-            <li className="page-item">
+            <li className={`page-item${page <= 1 ? ' disabled' : ''}`}>
               <button
                 type="button"
                 className="page-link"
@@ -397,34 +454,38 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
                 disabled={page <= 1}
                 aria-label="Previous page"
               >
-                Previous
+                ← Prev
               </button>
             </li>
-            {pageNumbers().map((p, i) => {
-              const prev = i > 0 ? pageNumbers()[i - 1] : 0;
-              const showEllipsis = prev && p > prev + 1;
-              return (
-                <React.Fragment key={p}>
-                  {showEllipsis && (
-                    <li className="page-item disabled">
-                      <span className="page-link">…</span>
+            {(() => {
+              const pages = pageNumbers();
+              return pages.map((p, i) => {
+                const prev = i > 0 ? pages[i - 1] : 0;
+                const showEllipsis = prev > 0 && p > prev + 1;
+                if (p < 1) return null;
+                return (
+                  <React.Fragment key={p}>
+                    {showEllipsis && (
+                      <li className="page-item disabled">
+                        <span className="page-link">…</span>
+                      </li>
+                    )}
+                    <li className={`page-item${p === page ? ' active' : ''}`}>
+                      <button
+                        type="button"
+                        className="page-link"
+                        onClick={() => goToPage(p)}
+                        aria-label={`Page ${p}`}
+                        aria-current={p === page ? 'page' : undefined}
+                      >
+                        {p}
+                      </button>
                     </li>
-                  )}
-                  <li className="page-item">
-                    <button
-                      type="button"
-                      className={`page-link ${p === page ? 'active' : ''}`}
-                      onClick={() => goToPage(p)}
-                      aria-label={`Page ${p}`}
-                      aria-current={p === page ? 'page' : undefined}
-                    >
-                      {p}
-                    </button>
-                  </li>
-                </React.Fragment>
-              );
-            })}
-            <li className="page-item">
+                  </React.Fragment>
+                );
+              });
+            })()}
+            <li className={`page-item${page >= totalPages ? ' disabled' : ''}`}>
               <button
                 type="button"
                 className="page-link"
@@ -432,7 +493,7 @@ function Home({ user, onLogout, onNavigate, onViewListing, isLoggingOut }) {
                 disabled={page >= totalPages}
                 aria-label="Next page"
               >
-                Next
+                Next →
               </button>
             </li>
           </ul>

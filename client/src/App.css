@@ -1,6 +1,6 @@
 .App {
   min-height: 100vh;
-  background-color: #f5f7fb;
+  background-color: var(--nbcc-surface, #f6f9fa);
 }
 
 .app-alert {
@@ -42,7 +42,8 @@
 
 .listing-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 0.75rem 1.5rem rgba(15, 23, 42, 0.08);
+  box-shadow: 0 0.75rem 1.5rem rgba(0, 117, 153, 0.1);
+  border-color: rgba(0, 117, 153, 0.2);
 }
 
 @media (max-width: 576px) {

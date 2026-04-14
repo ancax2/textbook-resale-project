@@ -42,8 +42,10 @@ desktop.ini
 *~
 
 # Uploaded files (optional - include if you want to track them)
-server/uploads/*
-!server/uploads/.gitkeep
+server/uploads/*.jpg
+server/uploads/*.jpeg
+server/uploads/*.gif
+!server/uploads/*.png
 
 # Temporary files
 *.tmp
